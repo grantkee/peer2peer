@@ -1,0 +1,16 @@
+[
+    {
+        "id": 0,
+        "title": "Free Software, Free Society: Selected Essays of Richard M. Stallman",
+        "author": "Richard M. Stallman",
+        "publisher": "GNU Press",
+        "public": true
+    },
+    {
+        "id": 1,
+        "title": "The Fall",
+        "author": "Albert Camus",
+        "publisher": "Vintage Books",
+        "public": true
+    }
+]
