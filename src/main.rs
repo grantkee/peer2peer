@@ -4,7 +4,10 @@ use log::{info, error};
 use libp2p::{
     floodsub::{Floodsub, Topic},
     identity,
-    noise::{Keypair, X25519Spec},
+    noise::{Keypair, X25519Spec, NoiseConfig},
+    tcp::TokioTcpConfig,
+    mplex,
+    core::upgrade,
     NetworkBehaviour, PeerId, Transport,
 };
 use once_cell::sync::Lazy;
@@ -63,4 +66,13 @@ async fn main() {
 
     // authentication keys using noise protocol
     let auth_keys = Keypair::<X25519Spec>::new().into_authentic(&KEYS).expect("unable to create auth keys");
+
+    // create transport
+    let transport = TokioTcpConfig::new() // use Tokio's async TCP
+        .upgrade(upgrade::Version::V1) //upgrade connection to use Noise protocol for secure communication
+        .authenticate(NoiseConfig::xx(auth_keys).into_authenticated()) // authenticate after upgrade - NoiseConfig::xx is guaranteed to be interoperable with other libp2p apps
+        .multiplex(mplex::MplexConfig::new()) // negotiate a (sub)stream multiplexer on top of authenticated transport for multiple substreams on same transport
+        .boxed(); // only capture Output and Error types
+
+
 }
