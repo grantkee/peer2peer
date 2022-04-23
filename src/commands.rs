@@ -1,7 +1,9 @@
+use crate::ListResponse;
+
 use super::{Book, BookBehavior, Library, ListMode, ListRequest, STORAGE_PATH, TOPIC};
 use libp2p::swarm::Swarm;
 use log::{error, info};
-use tokio::fs;
+use tokio::{fs, sync::mpsc};
 
 async fn read_local_library() -> Result<Library> {
     let content = fs::read(STORAGE_PATH).await?;
@@ -119,4 +121,25 @@ pub async fn handle_list_books(cmd: &str, swarm: &mut Swarm<BookBehavior>) {
             };
         }
     }
+}
+
+pub async fn respond_with_public_books(
+    sender: mpsc::UnboundedSender<ListResponse>,
+    receiver: String,
+) {
+    tokio::spawn(async move {
+        match read_local_library().await {
+            Ok(books) => {
+                let res = ListResponse {
+                    mode: ListMode::ALL,
+                    receiver,
+                    data: books.into_iter().filter(|b| b.public).collect(),
+                };
+                if let Err(e) = sender.send(res) {
+                    error!("error responding: {}", e);
+                }
+            }
+            Err(e) => error!("error retrieving local library: {}", e),
+        }
+    });
 }

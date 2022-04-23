@@ -1,12 +1,15 @@
-use crate::commands::{handle_add_book, handle_list_books, handle_list_peers, handle_share_book};
+use crate::commands::{
+    handle_add_book, handle_list_books, handle_list_peers, handle_share_book,
+    respond_with_public_books,
+};
 use libp2p::{
     core::upgrade,
-    floodsub::{Floodsub, Topic},
+    floodsub::{Floodsub, FloodsubEvent, Topic},
     identity,
     mdns::{Mdns, MdnsEvent},
     mplex,
     noise::{Keypair, NoiseConfig, X25519Spec},
-    swarm::{Swarm, SwarmBuilder},
+    swarm::{NetworkBehaviourEventProcess, Swarm, SwarmBuilder},
     tcp::TokioTcpConfig,
     NetworkBehaviour, PeerId, Transport,
 };
@@ -63,6 +66,60 @@ struct BookBehavior {
     mdns: Mdns,
     #[behaviour(ignore)]
     response_sender: mpsc::UnboundedSender<ListResponse>,
+}
+
+impl NetworkBehaviourEventProcess<MdnsEvent> for BookBehavior {
+    fn inject_event(&mut self, event: MdnsEvent) {
+        match event {
+            MdnsEvent::Discovered(discovered_list) => {
+                for (peer, _addr) in discovered_list {
+                    self.floodsub.add_node_to_partial_view(peer);
+                }
+            }
+            MdnsEvent::Expired(expired_list) => {
+                for (peer, _addr) in expired_list {
+                    if !self.mdns.has_node(&peer) {
+                        self.floodsub.remove_node_from_partial_view(&peer);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl NetworkBehaviourEventProcess<FloodsubEvent> for BookBehavior {
+    fn inject_event(&mut self, event: FloodsubEvent) {
+        match event {
+            FloodsubEvent::Message(msg) => {
+                if let Ok(res) = serde_json::from_slice::<ListResponse>(&msg.data) {
+                    if res.receiver == PEER_ID.to_string() {
+                        info!("response from {}:", msg.source);
+                        res.data.iter().for_each(|r| info!("{:?}", r));
+                    } else if let Ok(req) = serde_json::from_slice::<ListRequest>(&msg.data) {
+                        match req.mode {
+                            ListMode::ALL => {
+                                info!("request for all: {:?} from {:?}", req, msg.source);
+                                respond_with_public_books(
+                                    self.response_sender.clone(),
+                                    msg.source.to_string(),
+                                );
+                            }
+                            ListMode::One(ref peer_id) => {
+                                if peer_id == &PEER_ID.to_owned() {
+                                    info!("request for one: {:?} from {:?}", req, msg.source);
+                                    respond_with_public_books(
+                                        self.response_sender.clone(),
+                                        msg.source.to_string(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
 }
 
 #[tokio::main]
@@ -134,7 +191,9 @@ async fn main() {
         if let Some(event) = event_type {
             match event {
                 EventType::Response(res) => {
-                    unimplemented!()
+                    let json =
+                        serde_json::to_string(&res).expect("unable to jsonify event type response");
+                    swarm.floodsub.publish(TOPIC.clone(), json.as_bytes());
                 }
                 EventType::Input(line) => match line.as_str() {
                     "ls peers" => handle_list_peers(&mut swarm).await,
