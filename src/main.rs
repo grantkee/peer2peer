@@ -1,4 +1,4 @@
-use crate::commands::{handle_list_peers, handle_add_book};
+use crate::commands::{handle_add_book, handle_list_books, handle_list_peers, handle_share_book};
 use libp2p::{
     core::upgrade,
     floodsub::{Floodsub, Topic},
@@ -138,7 +138,7 @@ async fn main() {
                 }
                 EventType::Input(line) => match line.as_str() {
                     "ls peers" => handle_list_peers(&mut swarm).await,
-                    // cmd if cmd.starts_with("ls books") => handle_list_books(cmd, &mut swarm).await,
+                    cmd if cmd.starts_with("ls books") => handle_list_books(cmd, &mut swarm).await,
                     cmd if cmd.starts_with("add book") => handle_add_book(cmd).await,
                     cmd if cmd.starts_with("share book") => handle_share_book(cmd).await,
                     _ => error!("command unknown"),
