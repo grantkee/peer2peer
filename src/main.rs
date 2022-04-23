@@ -8,6 +8,7 @@ use libp2p::{
     tcp::TokioTcpConfig,
     mplex,
     core::upgrade,
+    mdns::{Mdns, MdnsEvent},
     NetworkBehaviour, PeerId, Transport,
 };
 use once_cell::sync::Lazy;
@@ -55,6 +56,14 @@ enum EventType {
     Input(String),
 }
 
+#[derive(NetworkBehaviour)]
+struct BookBehavior {
+    floodsub: Floodsub,
+    mdns: Mdns,
+    #[behaviour(ignore)]
+    response_sender: mpsc::UnboundedSender<ListResponse>
+}
+
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
@@ -74,5 +83,15 @@ async fn main() {
         .multiplex(mplex::MplexConfig::new()) // negotiate a (sub)stream multiplexer on top of authenticated transport for multiple substreams on same transport
         .boxed(); // only capture Output and Error types
 
+    // define logic for network and peers
+    // floodsub to handle events
+    // mdns for discovering local peers
+    let mut behavior = BookBehavior {
+        floodsub: Floodsub::new(PEER_ID.clone()),
+        mdns: Mdns::new(Default::default()).await.expect("unable to create mdns"),
+        response_sender
+    };
+
+    behavior.floodsub.subscribe(TOPIC.clone());
 
 }
