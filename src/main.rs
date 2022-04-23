@@ -9,6 +9,7 @@ use libp2p::{
     mplex,
     core::upgrade,
     mdns::{Mdns, MdnsEvent},
+    swarm::{Swarm, SwarmBuilder},
     NetworkBehaviour, PeerId, Transport,
 };
 use once_cell::sync::Lazy;
@@ -93,5 +94,13 @@ async fn main() {
     };
 
     behavior.floodsub.subscribe(TOPIC.clone());
+
+    // manage connections based on transport and behavior using tokio runtime
+    let mut swarm = SwarmBuilder::new(transport, behavior, PEER_ID.clone()).executor(Box::new(|future| {
+        tokio::spawn(future);
+    })).build();
+
+    // start swarm
+    Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().expect("unable to get local socket")).expect("swarm unable to start");
 
 }
