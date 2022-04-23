@@ -1919,18 +1919,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nfl-peer2peer"
-version = "0.1.0"
-dependencies = [
- "libp2p",
- "log",
- "once_cell",
- "pretty_env_logger",
- "serde",
- "tokio",
-]
-
-[[package]]
 name = "nix"
 version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2054,6 +2042,18 @@ name = "paste"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c520e05135d6e763148b6426a837e239041653ba7becd2e538c076c738025fc"
+
+[[package]]
+name = "peer2peer"
+version = "0.1.0"
+dependencies = [
+ "libp2p",
+ "log",
+ "once_cell",
+ "pretty_env_logger",
+ "serde",
+ "tokio",
+]
 
 [[package]]
 name = "percent-encoding"
