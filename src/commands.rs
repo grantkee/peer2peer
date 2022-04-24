@@ -94,7 +94,7 @@ async fn share_book(title: &str) -> Result<()> {
 }
 
 pub async fn handle_list_books(cmd: &str, swarm: &mut Swarm<BookBehavior>) {
-    let input = cmd.strip_prefix("ls books");
+    let input = cmd.strip_prefix("ls books ");
 
     match input {
         Some("all") => {
