@@ -1,16 +1,1 @@
-[
-    {
-        "id": 0,
-        "title": "Free Software, Free Society: Selected Essays of Richard M. Stallman",
-        "author": "Richard M. Stallman",
-        "publisher": "GNU Press",
-        "public": true
-    },
-    {
-        "id": 1,
-        "title": "The Fall",
-        "author": "Albert Camus",
-        "publisher": "Vintage Books",
-        "public": true
-    }
-]
+[{"id":0,"title":"Free Software, Free Society: Selected Essays of Richard M. Stallman","author":"Richard M. Stallman","publisher":"GNU Press","public":true},{"id":1,"title":"The Fall","author":"Albert Camus","publisher":"Vintage Books","public":true},{"id":2,"title":" turtles","author":"bart simpson","publisher":"fox","public":false}]
