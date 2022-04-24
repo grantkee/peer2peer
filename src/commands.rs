@@ -4,6 +4,7 @@ use super::{Book, BookBehavior, Library, ListMode, ListRequest, STORAGE_PATH, TO
 use libp2p::swarm::Swarm;
 use log::{error, info};
 use tokio::{fs, sync::mpsc};
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 async fn read_local_library() -> Result<Library> {
     let content = fs::read(STORAGE_PATH).await?;
@@ -19,7 +20,7 @@ async fn write_local_library(library: &Library) -> Result<()> {
 
 pub async fn handle_list_peers(swarm: &mut Swarm<BookBehavior>) {
     info!("Peers discovered: ");
-    let nodes = swarm.mdns.discovered_nodes();
+    let nodes = swarm.behaviour().mdns.discovered_nodes();
     let mut unique_peers = std::collections::HashSet::new();
 
     for peer in nodes {
@@ -38,7 +39,7 @@ pub async fn handle_add_book(cmd: &str) {
             let title = elem.get(0).expect("unable to get title");
             let author = elem.get(1).expect("unable to get author");
             let publisher = elem.get(2).expect("unable to get publisher");
-            if let Err(e) = add_new_book(title, author, publisher) {
+            if let Err(e) = add_new_book(title, author, publisher).await {
                 error!("error adding book to library: {}", e);
             }
         }
@@ -70,14 +71,14 @@ async fn add_new_book(title: &str, author: &str, publisher: &str) -> Result<()> 
 pub async fn handle_share_book(cmd: &str) {
     if let Some(input) = cmd.strip_prefix("share book") {
         match input.trim() {
-            Ok(title) => {
+            title => {
                 if let Err(e) = share_book(title).await {
                     info!("error sharing book {}: {}", title, e);
                 } else {
                     info!("now sharing book: {}", title);
                 }
             }
-            Err(e) => error!("invaltitle title: {}, {}", input.trim(), e),
+            _ => error!("invalid title: {}", input.trim()),
         };
     }
 }
@@ -101,7 +102,7 @@ pub async fn handle_list_books(cmd: &str, swarm: &mut Swarm<BookBehavior>) {
                 mode: ListMode::ALL,
             };
             let json = serde_json::to_string(&req).expect("unable to jsonify request for all");
-            swarm.floodsub.publish(TOPIC.clone(), json.as_bytes());
+            swarm.behaviour_mut().floodsub.publish(TOPIC.clone(), json.as_bytes());
         }
         Some(library_peer_id) => {
             let req = ListRequest {
@@ -109,7 +110,7 @@ pub async fn handle_list_books(cmd: &str, swarm: &mut Swarm<BookBehavior>) {
             };
             let json =
                 serde_json::to_string(&req).expect("unable to jsonify request for library peer id");
-            swarm.floodsub.publish(TOPIC.clone(), json.as_bytes());
+            swarm.behaviour_mut().floodsub.publish(TOPIC.clone(), json.as_bytes());
         }
         None => {
             match read_local_library().await {

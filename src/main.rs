@@ -9,6 +9,7 @@ use libp2p::{
     mdns::{Mdns, MdnsEvent},
     mplex,
     noise::{Keypair, NoiseConfig, X25519Spec},
+    futures::StreamExt,
     swarm::{NetworkBehaviourEventProcess, Swarm, SwarmBuilder},
     tcp::TokioTcpConfig,
     NetworkBehaviour, PeerId, Transport,
@@ -16,7 +17,7 @@ use libp2p::{
 use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, io::AsyncBufReadExt};
 mod commands;
 
 const STORAGE_PATH: &str = "./library.json";
@@ -49,7 +50,7 @@ struct ListRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct ListResponse {
+pub struct ListResponse {
     mode: ListMode,
     data: Library,
     receiver: String,
@@ -61,7 +62,8 @@ enum EventType {
 }
 
 #[derive(NetworkBehaviour)]
-struct BookBehavior {
+#[behaviour(event_process = true)]
+pub struct BookBehavior {
     floodsub: Floodsub,
     mdns: Mdns,
     #[behaviour(ignore)]
@@ -95,23 +97,23 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for BookBehavior {
                     if res.receiver == PEER_ID.to_string() {
                         info!("response from {}:", msg.source);
                         res.data.iter().for_each(|r| info!("{:?}", r));
-                    } else if let Ok(req) = serde_json::from_slice::<ListRequest>(&msg.data) {
-                        match req.mode {
-                            ListMode::ALL => {
-                                info!("request for all: {:?} from {:?}", req, msg.source);
+                    } 
+                } else if let Ok(req) = serde_json::from_slice::<ListRequest>(&msg.data) {
+                    match req.mode {
+                        ListMode::ALL => {
+                            info!("request for all: {:?} from {:?}", req, msg.source);
+                            respond_with_public_books(
+                                self.response_sender.clone(),
+                                msg.source.to_string(),
+                            );
+                        }
+                        ListMode::One(ref peer_id) => {
+                            if peer_id == &PEER_ID.to_string() {
+                                info!("request for one: {:?} from {:?}", req, msg.source);
                                 respond_with_public_books(
                                     self.response_sender.clone(),
                                     msg.source.to_string(),
                                 );
-                            }
-                            ListMode::One(ref peer_id) => {
-                                if peer_id == &PEER_ID.to_owned() {
-                                    info!("request for one: {:?} from {:?}", req, msg.source);
-                                    respond_with_public_books(
-                                        self.response_sender.clone(),
-                                        msg.source.to_string(),
-                                    );
-                                }
                             }
                         }
                     }
@@ -180,11 +182,11 @@ async fn main() {
         let event_type = {
             tokio::select! {
                 line = stdin.next_line() => Some(EventType::Input(line.expect("unable to get line").expect("unable to read line from stdin"))),
-                event = swarm.next() => {
+                response = response_receiver.recv() => Some(EventType::Response(response.expect("unable to get response"))),
+                event = swarm.select_next_some() => {
                     info!("Unhandled swarm event: {:?}", event);
                     None
                 },
-                response = response_receiver.recv() => Some(EventType::Response(response.expect("unable to get response")))
             }
         };
 
@@ -193,7 +195,7 @@ async fn main() {
                 EventType::Response(res) => {
                     let json =
                         serde_json::to_string(&res).expect("unable to jsonify event type response");
-                    swarm.floodsub.publish(TOPIC.clone(), json.as_bytes());
+                    swarm.behaviour_mut().floodsub.publish(TOPIC.clone(), json.as_bytes());
                 }
                 EventType::Input(line) => match line.as_str() {
                     "ls peers" => handle_list_peers(&mut swarm).await,
